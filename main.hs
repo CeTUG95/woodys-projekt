@@ -1,5 +1,30 @@
 import System.IO
 import System.Console.ANSI
+import System.Random as R
+----------------------------- HELPER FUNCTIONS -----------------------------
+
+data Facing = North
+    | South
+    | East
+    | West
+
+data World = World {
+    borders :: (Int, Int),
+    snake :: [(Int, Int)],
+    facing :: Facing,
+    snack :: (Int, Int)
+}
+
+world :: World
+world = World {
+    borders = (25, 60),
+    snake = [(5, x) | x <- [18..22]],
+    facing = West,
+    snack = (10, 10)
+}
+
+getRandom :: Int -> Int -> IO Int
+getRandom x y = getStdRandom (randomR (x,y))
 
 draw :: Char -> (Int, Int) -> IO ()
 draw char (row, col) = do
@@ -71,39 +96,74 @@ drawMultiplayerScore (rows, cols) = do
     draw '╩' (2, (cols - lengthPlayer - 7))
     write "0" (1, ( cols - 4))    -- Punkte hinter Score anzeigen
 
-drawSnake :: [(Int, Int)] -> (Int, Int) -> IO()
-drawSnake ((hx, hy):_) (rows, cols) = do
-    write "█" (hx, hy)
-drawSnake ((hx, hy):xs) (rows, cols) = do
-    write "█" (hx, hy)
-    drawSnake xs (rows, cols)
+---------------------------- GAME FUNCTIONALITY ----------------------------
 
-spawnSnake :: (Int, Int) -> IO()
-spawnSnake (rows, cols) = do
-    let snake = [(rows `div` 5, x) | x <- [10..13]]
-    drawSnake snake (rows, cols)
+-- spawnSnack :: World -> IO()
+-- spawnSnack world = do
+--     let (rows, cols) = (borders world)
+--     randX <- uniformR (3, (rows+2))
+--     randY <- uniformR (1, cols)
+--     world { snack = (randX, randY)}
+--     let (snackx, snacky) = snack world
+--     write 'O' (snackx, snacky)
+
+spawnSnake :: World -> IO()
+spawnSnake world = do
+    mapM_ (write "█") (reverse $ (snake world))
+    let (rows, cols) = (borders world)
     setCursorPosition (rows+3) (cols+2)
 
-singleplayer :: (Int, Int) -> IO()
-singleplayer (rows, cols) = do
+move :: Facing -> (Int, Int) -> (Int, Int)
+move direction (posx, posy) = do
+    case direction of
+        North -> (posx, (posy+1))
+        West -> ((posx-1), posy)
+        South -> (posx, (posy-1))
+        East -> ((posx+1), posy)
+
+getDirection :: Char -> World -> World
+getDirection input world = case input of
+        'w' -> world { facing = North }
+        'a' -> world { facing = West }
+        's' -> world { facing = South }
+        'd' -> world { facing = East }
+
+moveSnake :: World -> World IO ()
+moveSnake world = do
+    let (rows, cols) = (borders world)
+    let body = (snake world)
+    let newHead = move (facing world) (head body)
+    let newBody = [newHead] ++ init body
+    world = { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
+    clearField (rows+3) (cols+1)
+    spawnSnake world
+
+singleplayer :: World -> IO()
+singleplayer world = do
+    let (rows, cols) = (borders world)
     clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
     writeCenter "Singleplayer" (1, cols)
     drawSingleplayerScore (rows, cols)
-    spawnSnake (rows, cols)
+    spawnSnake world
     setCursorPosition (rows+3) (cols+2)
+    input <- getChar
+    getDirection input world
+    moveSnake world
 
-multiplayer :: (Int, Int) -> IO()
-multiplayer (rows, cols) = do
+multiplayer :: World -> IO()
+multiplayer world = do
+    let (rows, cols) = (borders world)
     clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
     writeCenter "Multiplayer" (1, cols)
+    writeCenter "Sorry ... not implemented yet :(" (15, cols)
     drawMultiplayerScore (rows, cols)
     setCursorPosition (rows+3) (cols+2)
 
-
-credits :: (Int, Int) -> IO()
-credits (rows, cols) = do
+credits :: World -> IO()
+credits world = do
+    let (rows, cols) = (borders world)
     clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
     writeCenter "Credits" (1, cols)
@@ -113,9 +173,9 @@ credits (rows, cols) = do
     writeCenter "Basti" ((rows `div` 2) + 4, cols)
     setCursorPosition (rows+3) (cols+2)
 
-
-mainMenu :: (Int, Int) -> IO()
-mainMenu (rows, cols) = do
+mainMenu :: World -> IO()
+mainMenu world = do
+    let (rows, cols) = (borders world)
     writeCenter "Main Menu" (1, cols)
     writeCenter "1 Singleplayer" ((rows `div` 2), cols)
     writeCenter "2 Multiplayer" ((rows `div` 2) + 1, cols)
@@ -124,9 +184,9 @@ mainMenu (rows, cols) = do
     setCursorPosition (rows+3) (cols+2)
     mode <- getChar
     case mode of
-        '1' -> singleplayer (rows, cols)
-        '2' -> multiplayer (rows, cols)
-        '3' -> credits (rows, cols)
+        '1' -> singleplayer world
+        '2' -> multiplayer world
+        '3' -> credits world
         _ -> writeCenter "Invalid selection! Try again..." ((rows `div` 2) + 4, cols)
 
 -- funktion um alle einstellungen zum start vorzunehmen
@@ -143,4 +203,4 @@ main = do
     setup                       -- einstellungen zum start vornehmen
     clearScreen                 -- funktion aus System.Console.ANSI
     drawBorders(rows, cols)     -- Weltgrenzen zeichnen mit anzahl zeilen und spalten
-    mainMenu(rows, cols)        -- Hauptmenü erzeugen
+    mainMenu world        -- Hauptmenü erzeugen
