@@ -37,20 +37,27 @@ drawBorders (rows, cols) = do
     draw '╚' (rows+3, 0)
     draw '╝' (rows+3, cols+1)
 
+clearField :: Int -> Int -> IO()
+clearField 0 cols = do
+    mapM_ (draw ' ') [(0, x) | x <- [0..cols]]
+clearField count cols = do
+    mapM_ (draw ' ') [(count, x) | x <- [0..cols]]
+    let rest = (count - 1)
+    clearField rest cols
 
 drawSingleplayerScore :: (Int, Int) -> IO()
 drawSingleplayerScore (rows, cols) = do
-    write "Score: " (1, 1)
-    write "0" (1, (length("Score: ") + 1))    -- Punkte hinter Score anzeigen
-    draw '╦' (0, (length("Score: ") + 6))
-    draw '║' (1, (length("Score: ") + 6))
-    draw '╩' (2, (length("Score: ") + 6))
+    write " Score: " (1, 1)
+    write "0" (1, (length(" Score: ") + 1))    -- Punkte hinter Score anzeigen
+    draw '╦' (0, (length(" Score: ") + 6))
+    draw '║' (1, (length(" Score: ") + 6))
+    draw '╩' (2, (length(" Score: ") + 6))
 
 drawMultiplayerScore :: (Int, Int) -> IO()
 drawMultiplayerScore (rows, cols) = do
     -- spieler 1 punktzahl interface
-    write "Player 1: " (1, 1)
-    let lengthPlayer = length "Player 1: "
+    write " Player 1: " (1, 1)
+    let lengthPlayer = length " Player 1: "
     write "0" (1, (lengthPlayer + 1))    -- Punkte hinter Score anzeigen
     draw '╦' (0, (lengthPlayer + 6))
     draw '║' (1, (lengthPlayer + 6))
@@ -59,20 +66,27 @@ drawMultiplayerScore (rows, cols) = do
     -- spieler 2 punktzahl interface
     write "Player 2: " (1, cols - lengthPlayer - 4)
     let lengthPlayer = length "Player 2: "
-    draw '╦' (0, (cols - lengthPlayer - 6))
-    draw '║' (1, (cols - lengthPlayer - 6))
-    draw '╩' (2, (cols - lengthPlayer - 6))
+    draw '╦' (0, (cols - lengthPlayer - 7))
+    draw '║' (1, (cols - lengthPlayer - 7))
+    draw '╩' (2, (cols - lengthPlayer - 7))
     write "0" (1, ( cols - 4))    -- Punkte hinter Score anzeigen
+
+drawSnake :: [(Int, Int)] -> (Int, Int) -> IO()
+drawSnake ((hx, hy):_) (rows, cols) = do
+    write "█" (hx, hy)
+drawSnake ((hx, hy):xs) (rows, cols) = do
+    write "█" (hx, hy)
+    drawSnake xs (rows, cols)
 
 spawnSnake :: (Int, Int) -> IO()
 spawnSnake (rows, cols) = do
-    let snake = "████"
-    writeCenter snake ((rows `div` 2), cols)
-
+    let snake = [(rows `div` 5, x) | x <- [10..13]]
+    drawSnake snake (rows, cols)
+    setCursorPosition (rows+3) (cols+2)
 
 singleplayer :: (Int, Int) -> IO()
 singleplayer (rows, cols) = do
-    clearScreen
+    clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
     writeCenter "Singleplayer" (1, cols)
     drawSingleplayerScore (rows, cols)
@@ -81,7 +95,7 @@ singleplayer (rows, cols) = do
 
 multiplayer :: (Int, Int) -> IO()
 multiplayer (rows, cols) = do
-    clearScreen
+    clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
     writeCenter "Multiplayer" (1, cols)
     drawMultiplayerScore (rows, cols)
@@ -90,8 +104,8 @@ multiplayer (rows, cols) = do
 
 credits :: (Int, Int) -> IO()
 credits (rows, cols) = do
-    clearScreen
-    drawBorders(rows, cols)
+    clearField (rows+3) (cols+1)
+    drawBorders (rows, cols)
     writeCenter "Credits" (1, cols)
     writeCenter "Written by" ((rows `div` 2), cols)
     writeCenter "Tugay" ((rows `div` 2) + 2, cols)
@@ -122,10 +136,11 @@ setup = do
     hSetBuffering stdout NoBuffering    -- bei output  nicht mehr auf newline warten
     hSetEcho stdin False                -- verhindert das printen der gedrückten tasten
 
-
 main :: IO ()
 main = do
-    setup                   -- einstellungen zum start vornehmen
-    clearScreen             -- funktion aus System.Console.ANSI
-    drawBorders(25, 60)     -- Weltgrenzen zeichnen mit anzahl zeilen und spalten
-    mainMenu(25, 60)        -- Hauptmenü erzeugen
+    let rows = 25
+    let cols = 60
+    setup                       -- einstellungen zum start vornehmen
+    clearScreen                 -- funktion aus System.Console.ANSI
+    drawBorders(rows, cols)     -- Weltgrenzen zeichnen mit anzahl zeilen und spalten
+    mainMenu(rows, cols)        -- Hauptmenü erzeugen
