@@ -65,6 +65,9 @@ drawMultiplayerScore (rows, cols) = do
     write "0" (1, ( cols - 4))    -- Punkte hinter Score anzeigen
 
 spawnSnake :: (Int, Int) -> IO()
+spawnSnake (rows, cols) = do
+    let snake = "████"
+    writeCenter snake ((rows `div` 2), cols)
 
 
 singleplayer :: (Int, Int) -> IO()
@@ -73,8 +76,8 @@ singleplayer (rows, cols) = do
     drawBorders (rows, cols)
     writeCenter "Singleplayer" (1, cols)
     drawSingleplayerScore (rows, cols)
+    spawnSnake (rows, cols)
     setCursorPosition (rows+3) (cols+2)
-    spawnSnake
 
 multiplayer :: (Int, Int) -> IO()
 multiplayer (rows, cols) = do
