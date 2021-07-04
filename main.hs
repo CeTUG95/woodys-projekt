@@ -1,6 +1,10 @@
 import System.IO
 import System.Console.ANSI
 import System.Random as R
+import Control.Concurrent (threadDelay)
+import Control.Monad (forever)
+import Pipes
+import Pipes.Concurrent
 ----------------------------- HELPER FUNCTIONS -----------------------------
 
 data Facing = North
@@ -14,6 +18,8 @@ data World = World {
     facing :: Facing,
     snack :: (Int, Int)
 }
+
+data Event = ChangeDirection Facing | UpdateGame
 
 world :: World
 world = World {
@@ -128,29 +134,43 @@ getDirection input world = case input of
         's' -> world { facing = South}
         'd' -> world { facing = East }
 
-moveSnake :: Char -> World -> IO ()
-moveSnake input world = do
-    let inputWorld = getDirection input world
+moveSnake :: World -> World
+moveSnake world = do
     let (rows, cols) = (borders world)
     let body = (snake world)
     let newHead = move (facing world) (head body)
     let newBody = [newHead] ++ init body
-    let snakeWorld = inputWorld { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
-    --clearField (rows+3) (cols+1)
-    input <- getChar
-    moveSnake input snakeWorld
+    let newWorld = world { snake = newBody }
+    newWorld
 
-singleplayer :: World -> IO()
-singleplayer world = do
-    let (rows, cols) = (borders world)
-    clearField (rows+3) (cols+1)
-    drawBorders (rows, cols)
-    writeCenter "Singleplayer" (1, cols)
-    drawSingleplayerScore (rows, cols)
-    spawnSnake world
-    setCursorPosition (rows+3) (cols+2)
+user :: IO Event
+user = do
     input <- getChar
-    moveSnake input world
+    case input of
+        'w' -> return(ChangeDirection North)
+        'a' -> return(ChangeDirection West)
+        's' -> return(ChangeDirection South)
+        'd' -> return(ChangeDirection East)
+    user
+
+update :: Producer Event IO r
+update = forever $ do
+    lift $ threadDelay 2000000  -- Wait 2 seconds
+    yield (UpdateGame)
+
+singleplayer :: Consumer Event IO ()
+singleplayer = loop world
+  where
+    loop world = do
+        let (rows, cols) = (borders world)
+        clearField (rows+3) (cols+1)
+        drawBorders (rows, cols)
+        writeCenter "Singleplayer" (1, cols)
+        drawSingleplayerScore (rows, cols)
+        event <- await
+        case event of
+            ChangeDirection d -> loop (world {facing = d})
+            UpdateGame        -> loop (moveSnake world) 
 
 multiplayer :: World -> IO()
 multiplayer world = do
@@ -185,7 +205,14 @@ mainMenu world = do
     setCursorPosition (rows+3) (cols+2)
     mode <- getChar
     case mode of
-        '1' -> singleplayer world
+        '1' -> do
+            (output, input) <- spawn Unbounded
+            forkIO $ do runEffect $ lift user >~ toOutput output 
+                        performGC
+            forkIO $ do runEffect $ update  >-> toOutput output 
+                        performGC
+            runEffect $ fromInput input >-> singleplayer
+
         '2' -> multiplayer world
         '3' -> credits world
         _ -> writeCenter "Invalid selection! Try again..." ((rows `div` 2) + 4, cols)
