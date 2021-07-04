@@ -12,6 +12,7 @@
 
 Fehlende Module installieren:
 ```bash
+$ cabal update
 $ cabal install pipes
 $ cabal install pipes-concurrency
 $ cabal install ansi-terminal
