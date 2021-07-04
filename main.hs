@@ -123,20 +123,22 @@ move direction (posx, posy) = do
 
 getDirection :: Char -> World -> World
 getDirection input world = case input of
-        'w' -> world { facing = North }
+        'w' -> world { facing = North}
         'a' -> world { facing = West }
-        's' -> world { facing = South }
+        's' -> world { facing = South}
         'd' -> world { facing = East }
 
-moveSnake :: World -> World IO ()
-moveSnake world = do
+moveSnake :: Char -> World -> IO ()
+moveSnake input world = do
+    let inputWorld = getDirection input world
     let (rows, cols) = (borders world)
     let body = (snake world)
     let newHead = move (facing world) (head body)
     let newBody = [newHead] ++ init body
-    world { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
-    clearField (rows+3) (cols+1)
-    spawnSnake world
+    let snakeWorld = inputWorld { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
+    --clearField (rows+3) (cols+1)
+    input <- getChar
+    moveSnake input snakeWorld
 
 singleplayer :: World -> IO()
 singleplayer world = do
@@ -148,8 +150,7 @@ singleplayer world = do
     spawnSnake world
     setCursorPosition (rows+3) (cols+2)
     input <- getChar
-    getDirection input world
-    moveSnake world
+    moveSnake input world
 
 multiplayer :: World -> IO()
 multiplayer world = do
