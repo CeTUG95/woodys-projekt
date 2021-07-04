@@ -134,7 +134,7 @@ moveSnake world = do
     let body = (snake world)
     let newHead = move (facing world) (head body)
     let newBody = [newHead] ++ init body
-    world = { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
+    world { snake = newBody } -- Problem hier, weil World und IO geändert wird.. was tun?
     clearField (rows+3) (cols+1)
     spawnSnake world
 
