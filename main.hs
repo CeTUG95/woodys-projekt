@@ -137,16 +137,15 @@ moveSnake world = do
     let newWorld = world { snake = newBody }
     newWorld
 
-user :: IO Event
-user = do
-    input <- getChar
+user :: Producer Event IO ()
+user = forever $ do
+    input <- lift getChar
     case input of
-        'w' -> return(ChangeDirection North)
-        'a' -> return(ChangeDirection West)
-        's' -> return(ChangeDirection South)
-        'd' -> return(ChangeDirection East)
-        _ -> return(NotDoingAThing)
-    user
+        'w' -> yield(ChangeDirection North)
+        'a' -> yield(ChangeDirection West)
+        's' -> yield(ChangeDirection South)
+        'd' -> yield(ChangeDirection East)
+        _ -> yield(NotDoingAThing)
 
 update :: Producer Event IO r
 update = forever $ do
@@ -165,8 +164,9 @@ singleplayer = loop world
         lift $ spawnSnake world
         event <- await
         case event of
-            ChangeDirection d -> loop (world {facing = d})
+            ChangeDirection facing -> loop (world {facing = facing})
             UpdateGame        -> loop (moveSnake world) 
+            _ -> loop world
 
 multiplayer :: World -> IO()
 multiplayer world = do
@@ -208,7 +208,7 @@ mainMenu world = do
             writeCenter "Singleplayer" (1, cols)
             drawSingleplayerScore (rows, cols)
             (output, input) <- spawn unbounded
-            forkIO $ do runEffect $ lift user >~ toOutput output 
+            forkIO $ do runEffect $ user >-> toOutput output 
                         performGC
             forkIO $ do runEffect $ update  >-> toOutput output 
                         performGC
