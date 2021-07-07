@@ -11,6 +11,7 @@ data Facing = North
     | South
     | East
     | West
+    deriving (Show)
 
 data World = World {
     borders :: (Int, Int),
@@ -19,7 +20,7 @@ data World = World {
     snack :: (Int, Int)
 }
 
-data Event = ChangeDirection Facing | UpdateGame
+data Event = ChangeDirection Facing | NotDoingAThing | UpdateGame deriving (Show)
 
 world :: World
 world = World {
@@ -151,6 +152,7 @@ user = do
         'a' -> return(ChangeDirection West)
         's' -> return(ChangeDirection South)
         'd' -> return(ChangeDirection East)
+        _ -> return(NotDoingAThing)
     user
 
 update :: Producer Event IO r
@@ -159,14 +161,14 @@ update = forever $ do
     yield (UpdateGame)
 
 singleplayer :: Consumer Event IO ()
-singleplayer = loop world
+singleplayer = loop world 
   where
     loop world = do
         let (rows, cols) = (borders world)
-        clearField (rows+3) (cols+1)
-        drawBorders (rows, cols)
-        writeCenter "Singleplayer" (1, cols)
-        drawSingleplayerScore (rows, cols)
+        lift $ clearField (rows+3) (cols+1)
+        lift $ drawBorders (rows, cols)
+        lift $ writeCenter "Singleplayer" (1, cols)
+        lift $ drawSingleplayerScore (rows, cols)
         event <- await
         case event of
             ChangeDirection d -> loop (world {facing = d})
@@ -206,6 +208,11 @@ mainMenu world = do
     mode <- getChar
     case mode of
         '1' -> do
+            let (rows, cols) = (borders world)
+            clearField (rows+3) (cols+1)
+            drawBorders (rows, cols)
+            writeCenter "Singleplayer" (1, cols)
+            drawSingleplayerScore (rows, cols)
             (output, input) <- spawn Unbounded
             forkIO $ do runEffect $ lift user >~ toOutput output 
                         performGC
