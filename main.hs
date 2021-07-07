@@ -128,13 +128,6 @@ move direction (posx, posy) = do
         South -> (posx, (posy-1))
         East -> ((posx+1), posy)
 
-getDirection :: Char -> World -> World
-getDirection input world = case input of
-        'w' -> world { facing = North}
-        'a' -> world { facing = West }
-        's' -> world { facing = South}
-        'd' -> world { facing = East }
-
 moveSnake :: World -> World
 moveSnake world = do
     let (rows, cols) = (borders world)
@@ -169,6 +162,7 @@ singleplayer = loop world
         lift $ drawBorders (rows, cols)
         lift $ writeCenter "Singleplayer" (1, cols)
         lift $ drawSingleplayerScore (rows, cols)
+        lift $ spawnSnake world
         event <- await
         case event of
             ChangeDirection d -> loop (world {facing = d})
@@ -213,7 +207,7 @@ mainMenu world = do
             drawBorders (rows, cols)
             writeCenter "Singleplayer" (1, cols)
             drawSingleplayerScore (rows, cols)
-            (output, input) <- spawn Unbounded
+            (output, input) <- spawn unbounded
             forkIO $ do runEffect $ lift user >~ toOutput output 
                         performGC
             forkIO $ do runEffect $ update  >-> toOutput output 
