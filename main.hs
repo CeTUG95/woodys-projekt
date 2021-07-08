@@ -18,11 +18,11 @@ data World = World {
     snake :: [(Int, Int)],
     facing :: Facing,
     snack :: (Int, Int),
-    randomGen :: R.StdGen,
+    randomSeed :: R.StdGen,
     score :: Int
 }
 
-data Event = ChangeDirection Facing | NotDoingAThing | UpdateGame | SnackEaten deriving (Show)
+data Event = ChangeDirection Facing | NotDoingAThing | UpdateGame deriving (Show)
 
 world :: World
 world = World {
@@ -30,7 +30,7 @@ world = World {
     snake = [(5, x) | x <- [18..22]],
     facing = West,
     snack = (10, 10),
-    randomGen = R.mkStdGen 0,
+    randomSeed = R.mkStdGen 0,
     score = 0
 }
 
@@ -81,10 +81,10 @@ clearField count cols = do
     let rest = (count - 1)
     clearField rest cols
 
-drawSingleplayerScore :: (Int, Int) -> IO()
-drawSingleplayerScore (rows, cols) = do
+drawSingleplayerScore :: World -> (Int, Int) -> IO()
+drawSingleplayerScore world (rows, cols) = do
     write " Score: " (1, 1)
-    write "0" (1, (length(" Score: ") + 1))    -- Punkte hinter Score anzeigen
+    write (show (score world)) (1, (length(" Score: ") + 1))    -- Punkte hinter Score anzeigen
     draw '╦' (0, (length(" Score: ") + 6))
     draw '║' (1, (length(" Score: ") + 6))
     draw '╩' (2, (length(" Score: ") + 6))
@@ -156,20 +156,25 @@ drawSnack world = do
     write "O" (snackx, snacky)
 
 snackSpawn :: World -> World
-initialSnackSpawn world = do
+snackSpawn world = do
     let (rows, cols) = (borders world)
-    let (randX, seed) = R.randomR (0, rows) (randomGen world)
-    let g = R.mkStdGen 0
-    let (randY, seed) = R.randomR (3, cols+2) g
-    let newWorld = world { snack = (randX, randY) }
+    let g = (randomSeed world)
+    let (randX, seed) = R.randomR (0, rows) g
+    let (randY, seed1) = R.randomR (3, cols+2) seed
+    let newWorld = world { snack = (randX, randY), randomSeed = seed1 }
     newWorld
 
-snackEaten :: Event
-snackEaten = do
+riseScore :: World -> World
+riseScore world = do
+    let newScore = (score world) + 1
+    let newWorld = world { score = newScore }
+    let newSnakeWorld = newWorld { snake = (snake newWorld) ++ [last (snake newWorld)] }
+    newSnakeWorld
+
 
 update :: Producer Event IO r
 update = forever $ do
-    lift $ threadDelay 2000000  -- Wait 2 seconds
+    lift $ threadDelay 500000  -- Wait 2 seconds
     yield (UpdateGame)
 
 singleplayer :: Consumer Event IO ()
@@ -180,17 +185,19 @@ singleplayer = loop world
         lift $ clearField (rows+3) (cols+1)
         lift $ drawBorders (rows, cols)
         lift $ writeCenter "Singleplayer" (1, cols)
-        lift $ drawSingleplayerScore (rows, cols)
-        lift $ spawnSnake world
+        lift $ drawSingleplayerScore world (rows, cols)
         lift $ drawSnack world
+        lift $ spawnSnake world
+        let newWorld =  if head (snake world) == (snack world)
+                        then snackSpawn (riseScore world)
+                        else world
         event <- await
         case event of
-            ChangeDirection facing -> if checkFacing world facing
-                                      then loop (world {facing = facing})
-                                      else loop world
-            UpdateGame -> loop (moveSnake world)
-            SnackEaten -> loop (snackSpawn world)
-            _ -> loop world
+            ChangeDirection facing -> if checkFacing newWorld facing
+                                      then loop (newWorld {facing = facing})
+                                      else loop newWorld
+            UpdateGame -> loop (moveSnake newWorld)
+            _ -> loop newWorld
 
 multiplayer :: World -> IO()
 multiplayer world = do
@@ -230,10 +237,10 @@ mainMenu world = do
             clearField (rows+3) (cols+1)
             drawBorders (rows, cols)
             writeCenter "Singleplayer" (1, cols)
-            drawSingleplayerScore (rows, cols)
+            drawSingleplayerScore world (rows, cols)
             (output, input) <- spawn unbounded
             forkIO $ do runEffect $ user >-> toOutput output
-                        performGC
+                        performGC -- Garbage collection for pipes
             forkIO $ do runEffect $ update  >-> toOutput output
                         performGC
             runEffect $ fromInput input >-> singleplayer
