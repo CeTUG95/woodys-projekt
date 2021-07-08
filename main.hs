@@ -11,23 +11,27 @@ data Facing = North
     | South
     | East
     | West
-    deriving (Show)
+    deriving (Show, Eq)
 
 data World = World {
     borders :: (Int, Int),
     snake :: [(Int, Int)],
     facing :: Facing,
-    snack :: (Int, Int)
+    snack :: (Int, Int),
+    randomGen :: R.StdGen,
+    score :: Int
 }
 
-data Event = ChangeDirection Facing | NotDoingAThing | UpdateGame deriving (Show)
+data Event = ChangeDirection Facing | NotDoingAThing | UpdateGame | SnackEaten deriving (Show)
 
 world :: World
 world = World {
     borders = (25, 60),
     snake = [(5, x) | x <- [18..22]],
     facing = West,
-    snack = (10, 10)
+    snack = (10, 10),
+    randomGen = R.mkStdGen 0,
+    score = 0
 }
 
 getRandom :: Int -> Int -> IO Int
@@ -105,15 +109,6 @@ drawMultiplayerScore (rows, cols) = do
 
 ---------------------------- GAME FUNCTIONALITY ----------------------------
 
--- spawnSnack :: World -> IO()
--- spawnSnack world = do
---     let (rows, cols) = (borders world)
---     randX <- uniformR (3, (rows+2))
---     randY <- uniformR (1, cols)
---     world { snack = (randX, randY)}
---     let (snackx, snacky) = snack world
---     write 'O' (snackx, snacky)
-
 spawnSnake :: World -> IO()
 spawnSnake world = do
     mapM_ (write "█") (reverse $ (snake world))
@@ -123,10 +118,10 @@ spawnSnake world = do
 move :: Facing -> (Int, Int) -> (Int, Int)
 move direction (posx, posy) = do
     case direction of
-        North -> (posx, (posy+1))
-        West -> ((posx-1), posy)
-        South -> (posx, (posy-1))
-        East -> ((posx+1), posy)
+        North -> ((posx-1), posy)
+        West -> (posx, (posy-1))
+        South -> ((posx+1), posy)
+        East -> (posx, (posy+1))
 
 moveSnake :: World -> World
 moveSnake world = do
@@ -136,6 +131,14 @@ moveSnake world = do
     let newBody = [newHead] ++ init body
     let newWorld = world { snake = newBody }
     newWorld
+
+checkFacing :: World -> Facing -> Bool
+checkFacing world direction | direction == North && (facing world) == South = False
+                            | direction == South && (facing world) == North = False
+                            | direction == East && (facing world) == West = False
+                            | direction == West && (facing world) == East = False
+                            | otherwise = True
+
 
 user :: Producer Event IO ()
 user = forever $ do
@@ -147,13 +150,30 @@ user = forever $ do
         'd' -> yield(ChangeDirection East)
         _ -> yield(NotDoingAThing)
 
+drawSnack :: World -> IO()
+drawSnack world = do
+    let (snackx, snacky) = (snack world)
+    write "O" (snackx, snacky)
+
+snackSpawn :: World -> World
+initialSnackSpawn world = do
+    let (rows, cols) = (borders world)
+    let (randX, seed) = R.randomR (0, rows) (randomGen world)
+    let g = R.mkStdGen 0
+    let (randY, seed) = R.randomR (3, cols+2) g
+    let newWorld = world { snack = (randX, randY) }
+    newWorld
+
+snackEaten :: Event
+snackEaten = do
+
 update :: Producer Event IO r
 update = forever $ do
     lift $ threadDelay 2000000  -- Wait 2 seconds
     yield (UpdateGame)
 
 singleplayer :: Consumer Event IO ()
-singleplayer = loop world 
+singleplayer = loop world
   where
     loop world = do
         let (rows, cols) = (borders world)
@@ -162,10 +182,14 @@ singleplayer = loop world
         lift $ writeCenter "Singleplayer" (1, cols)
         lift $ drawSingleplayerScore (rows, cols)
         lift $ spawnSnake world
+        lift $ drawSnack world
         event <- await
         case event of
-            ChangeDirection facing -> loop (world {facing = facing})
-            UpdateGame        -> loop (moveSnake world) 
+            ChangeDirection facing -> if checkFacing world facing
+                                      then loop (world {facing = facing})
+                                      else loop world
+            UpdateGame -> loop (moveSnake world)
+            SnackEaten -> loop (snackSpawn world)
             _ -> loop world
 
 multiplayer :: World -> IO()
@@ -208,9 +232,9 @@ mainMenu world = do
             writeCenter "Singleplayer" (1, cols)
             drawSingleplayerScore (rows, cols)
             (output, input) <- spawn unbounded
-            forkIO $ do runEffect $ user >-> toOutput output 
+            forkIO $ do runEffect $ user >-> toOutput output
                         performGC
-            forkIO $ do runEffect $ update  >-> toOutput output 
+            forkIO $ do runEffect $ update  >-> toOutput output
                         performGC
             runEffect $ fromInput input >-> singleplayer
 
