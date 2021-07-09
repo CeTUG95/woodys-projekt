@@ -16,6 +16,7 @@ data Facing = North
 data World = World {
     borders :: (Int, Int),
     snake :: [(Int, Int)],
+    snakeLast :: [(Int, Int)],
     facing :: Facing,
     snack :: (Int, Int),
     randomSeed :: R.StdGen,
@@ -28,6 +29,7 @@ world :: World
 world = World {
     borders = (25, 60),
     snake = [(5, x) | x <- [18..22]],
+    snakeLast = [(5, x) | x <- [18..22]],
     facing = West,
     snack = (10, 10),
     randomSeed = R.mkStdGen 0,
@@ -109,10 +111,10 @@ drawMultiplayerScore (rows, cols) = do
 
 ---------------------------- GAME FUNCTIONALITY ----------------------------
 
-spawnSnake :: World -> IO()
-spawnSnake world = do
-    mapM_ (write "█") (reverse $ (snake world))
-    let (rows, cols) = (borders world)
+drawSnake :: [(Int, Int)] -> (Int, Int) -> String -> IO()
+drawSnake snake borders c = do
+    mapM_ (write c) (reverse $ snake)
+    let (rows, cols) = borders
     setCursorPosition (rows+3) (cols+2)
 
 move :: Facing -> (Int, Int) -> (Int, Int)
@@ -129,7 +131,7 @@ moveSnake world = do
     let body = (snake world)
     let newHead = move (facing world) (head body)
     let newBody = [newHead] ++ init body
-    let newWorld = world { snake = newBody }
+    let newWorld = world { snake = newBody, snakeLast = body }
     newWorld
 
 checkFacing :: World -> Facing -> Bool
@@ -171,23 +173,47 @@ riseScore world = do
     let newSnakeWorld = newWorld { snake = (snake newWorld) ++ [last (snake newWorld)] }
     newSnakeWorld
 
+detectCollisionSnake :: (Int, Int) -> (Int, Int) -> Bool
+detectCollisionSnake snakeHead snakePart = snakeHead == snakePart
+
+detectCollision :: World -> Bool
+detectCollision world = do
+    let (rows, cols) = (borders world)
+    let (y, x) = head (snake world)
+    --  links    rechts      oben       unten         schlange
+    if (x < 2 || x >= cols || y <= 3 || y > rows+1 || (elem True $ map (\snakePart -> detectCollisionSnake (head (snake world)) snakePart) (tail (snake world)))) then
+        False
+    else
+        True
 
 update :: Producer Event IO r
 update = forever $ do
-    lift $ threadDelay 500000  -- Wait 2 seconds
+    lift $ threadDelay 250000 -- Wait 250 ms
     yield (UpdateGame)
+
+gameOver :: World -> IO()
+gameOver world = do
+    let (rows, cols) = (borders world)
+    clearField (rows+3) (cols+1)
+    drawBorders (rows, cols)
+    writeCenter "GAME OVER" (((rows `div` 2)+2), cols)
+    writeCenter ("Score " ++ show (score world)) (((rows `div` 2)+4), cols)
+    writeCenter "Press any key to continue." (((rows `div` 2)+10), cols)
+    setCursorPosition (rows+3) (cols+2)
+
 
 singleplayer :: Consumer Event IO ()
 singleplayer = loop world
   where
     loop world = do
         let (rows, cols) = (borders world)
-        lift $ clearField (rows+3) (cols+1)
+        lift $ drawSnake (snakeLast world) (borders world) " "
+        -- lift $ clearField (rows+3) (cols+1)
         lift $ drawBorders (rows, cols)
         lift $ writeCenter "Singleplayer" (1, cols)
         lift $ drawSingleplayerScore world (rows, cols)
         lift $ drawSnack world
-        lift $ spawnSnake world
+        lift $ drawSnake (snake world) (borders world) "█"
         let newWorld =  if head (snake world) == (snack world)
                         then snackSpawn (riseScore world)
                         else world
@@ -196,7 +222,10 @@ singleplayer = loop world
             ChangeDirection facing -> if checkFacing newWorld facing
                                       then loop (newWorld {facing = facing})
                                       else loop newWorld
-            UpdateGame -> loop (moveSnake newWorld)
+            UpdateGame ->   if detectCollision world then
+                                loop (moveSnake newWorld)
+                            else
+                                lift $ gameOver newWorld
             _ -> loop newWorld
 
 multiplayer :: World -> IO()
@@ -224,6 +253,8 @@ credits world = do
 mainMenu :: World -> IO()
 mainMenu world = do
     let (rows, cols) = (borders world)
+    clearField (rows+3) (cols+1)
+    drawBorders (rows, cols)
     writeCenter "Main Menu" (1, cols)
     writeCenter "1 Singleplayer" ((rows `div` 2), cols)
     writeCenter "2 Multiplayer" ((rows `div` 2) + 1, cols)
@@ -244,7 +275,9 @@ mainMenu world = do
             forkIO $ do runEffect $ update  >-> toOutput output
                         performGC
             runEffect $ fromInput input >-> singleplayer
-
+            performGC
+            getChar
+            main
         '2' -> multiplayer world
         '3' -> credits world
         _ -> writeCenter "Invalid selection! Try again..." ((rows `div` 2) + 4, cols)
