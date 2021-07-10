@@ -8,7 +8,18 @@
 * cabal (https://www.haskell.org/cabal/)
 
 
-### Installation:
+### Installation Linux:
+
+Fehlende Module installieren:
+```bash
+$ cabal update
+$ cabal install random
+$ cabal install pipes
+$ cabal install pipes-concurrency
+$ cabal install ansi-terminal
+```
+
+### Installation Windows:
 
 Fehlende Module installieren:
 ```bash

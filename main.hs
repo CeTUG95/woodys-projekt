@@ -5,6 +5,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (forever)
 import Pipes
 import Pipes.Concurrent
+import qualified Data.Text as Text
 ----------------------------- HELPER FUNCTIONS -----------------------------
 
 data Facing = North
@@ -91,29 +92,13 @@ drawSingleplayerScore world (rows, cols) = do
     draw '║' (1, (length(" Score: ") + 6))
     draw '╩' (2, (length(" Score: ") + 6))
 
-drawMultiplayerScore :: (Int, Int) -> IO()
-drawMultiplayerScore (rows, cols) = do
-    -- spieler 1 punktzahl interface
-    write " Player 1: " (1, 1)
-    let lengthPlayer = length " Player 1: "
-    write "0" (1, (lengthPlayer + 1))    -- Punkte hinter Score anzeigen
-    draw '╦' (0, (lengthPlayer + 6))
-    draw '║' (1, (lengthPlayer + 6))
-    draw '╩' (2, (lengthPlayer + 6))
-
-    -- spieler 2 punktzahl interface
-    write "Player 2: " (1, cols - lengthPlayer - 4)
-    let lengthPlayer = length "Player 2: "
-    draw '╦' (0, (cols - lengthPlayer - 7))
-    draw '║' (1, (cols - lengthPlayer - 7))
-    draw '╩' (2, (cols - lengthPlayer - 7))
-    write "0" (1, ( cols - 4))    -- Punkte hinter Score anzeigen
-
 ---------------------------- GAME FUNCTIONALITY ----------------------------
 
 drawSnake :: [(Int, Int)] -> (Int, Int) -> String -> IO()
 drawSnake snake borders c = do
+    setSGR [SetColor Foreground Vivid Blue]
     mapM_ (write c) (reverse $ snake)
+    setSGR [Reset]
     let (rows, cols) = borders
     setCursorPosition (rows+3) (cols+2)
 
@@ -155,14 +140,18 @@ user = forever $ do
 drawSnack :: World -> IO()
 drawSnack world = do
     let (snackx, snacky) = (snack world)
-    write "O" (snackx, snacky)
+    setSGR [SetColor Foreground Vivid Red]
+    write "☻" (snackx, snacky)
+    -- setCursorPosition snackx snacky
+    -- mapM_ putStrLn (unicodeByName "pizza")
+    setSGR [Reset]
 
 snackSpawn :: World -> World
 snackSpawn world = do
     let (rows, cols) = (borders world)
     let g = (randomSeed world)
-    let (randX, seed) = R.randomR (0, rows) g
-    let (randY, seed1) = R.randomR (3, cols+2) seed
+    let (randX, seed) = R.randomR (3, rows+2) g
+    let (randY, seed1) = R.randomR (1, cols) seed
     let newWorld = world { snack = (randX, randY), randomSeed = seed1 }
     newWorld
 
@@ -181,14 +170,14 @@ detectCollision world = do
     let (rows, cols) = (borders world)
     let (y, x) = head (snake world)
     --  links    rechts      oben       unten         schlange
-    if (x < 2 || x >= cols || y <= 3 || y > rows+1 || (elem True $ map (\snakePart -> detectCollisionSnake (head (snake world)) snakePart) (tail (snake world)))) then
+    if (x < 1 || x > cols || y < 3 || y > rows+2 || (elem True $ map (\snakePart -> detectCollisionSnake (head (snake world)) snakePart) (tail (snake world)))) then
         False
     else
         True
 
 update :: Producer Event IO r
 update = forever $ do
-    lift $ threadDelay 250000 -- Wait 250 ms
+    lift $ threadDelay 100000 -- Wait 100 ms
     yield (UpdateGame)
 
 gameOver :: World -> IO()
@@ -196,11 +185,14 @@ gameOver world = do
     let (rows, cols) = (borders world)
     clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
-    writeCenter "GAME OVER" (((rows `div` 2)+2), cols)
-    writeCenter ("Score " ++ show (score world)) (((rows `div` 2)+4), cols)
-    writeCenter "Press any key to continue." (((rows `div` 2)+10), cols)
+    writeCenter "GAME OVER" (((rows `div` 2)), cols)
+    writeCenter ("Your score: " ++ show (score world)) (((rows `div` 2)+2), cols)
+    hSetEcho stdin True -- schaltet printen der Buchstaben wieder an
+    write "Enter your name: " (((rows `div` 2)+4), 5)
+    name <- getLine
+    appendFile "highscores.txt" (name ++ ": " ++ show (score world) ++ "\n")
+    hSetEcho stdin False
     setCursorPosition (rows+3) (cols+2)
-
 
 singleplayer :: Consumer Event IO ()
 singleplayer = loop world
@@ -224,19 +216,28 @@ singleplayer = loop world
                                       else loop newWorld
             UpdateGame ->   if detectCollision world then
                                 loop (moveSnake newWorld)
-                            else
+                            else do
                                 lift $ gameOver newWorld
             _ -> loop newWorld
 
-multiplayer :: World -> IO()
-multiplayer world = do
+writeHighscores :: [String] -> Int -> IO()
+writeHighscores [x] line = write x (line, 3)
+writeHighscores (x:xs) line = do
+    write x (line, 3)
+    writeHighscores xs (line-1)
+
+highscores :: World -> IO()
+highscores world = do
     let (rows, cols) = (borders world)
     clearField (rows+3) (cols+1)
     drawBorders (rows, cols)
-    writeCenter "Multiplayer" (1, cols)
-    writeCenter "Sorry ... not implemented yet :(" (15, cols)
-    drawMultiplayerScore (rows, cols)
+    writeCenter "Highscores" (1, cols)
+    highscores <- readFile "highscores.txt"
+    let list = map Text.unpack $ Text.splitOn (Text.pack "\n") (Text.pack highscores)
+    writeHighscores list ((length list)+3)
     setCursorPosition (rows+3) (cols+2)
+    getChar
+    main
 
 credits :: World -> IO()
 credits world = do
@@ -249,6 +250,8 @@ credits world = do
     writeCenter "Niaz" ((rows `div` 2) + 3, cols)
     writeCenter "Basti" ((rows `div` 2) + 4, cols)
     setCursorPosition (rows+3) (cols+2)
+    ret <- getChar
+    writeCenter "Back" ((rows `div` 2) + 6, cols)
 
 mainMenu :: World -> IO()
 mainMenu world = do
@@ -257,7 +260,7 @@ mainMenu world = do
     drawBorders (rows, cols)
     writeCenter "Main Menu" (1, cols)
     writeCenter "1 Singleplayer" ((rows `div` 2), cols)
-    writeCenter "2 Multiplayer" ((rows `div` 2) + 1, cols)
+    writeCenter "2 Highscores" ((rows `div` 2) + 1, cols)
     writeCenter "3 Credits" ((rows `div` 2) + 2, cols)
     writeCenter "Select mode..." ((rows `div` 2) + 4, cols)
     setCursorPosition (rows+3) (cols+2)
@@ -276,10 +279,11 @@ mainMenu world = do
                         performGC
             runEffect $ fromInput input >-> singleplayer
             performGC
-            getChar
             main
-        '2' -> multiplayer world
-        '3' -> credits world
+        '2' -> highscores world
+        '3' -> do
+            credits world
+            main
         _ -> writeCenter "Invalid selection! Try again..." ((rows `div` 2) + 4, cols)
 
 -- funktion um alle einstellungen zum start vorzunehmen
