@@ -6,6 +6,7 @@ import Control.Monad (forever)
 import Pipes
 import Pipes.Concurrent
 import qualified Data.Text as Text
+import Data.Emoji
 ----------------------------- HELPER FUNCTIONS -----------------------------
 
 data Facing = North
@@ -96,7 +97,9 @@ drawSingleplayerScore world (rows, cols) = do
 
 drawSnake :: [(Int, Int)] -> (Int, Int) -> String -> IO()
 drawSnake snake borders c = do
+    setSGR [SetColor Foreground Vivid Blue]
     mapM_ (write c) (reverse $ snake)
+    setSGR [Reset]
     let (rows, cols) = borders
     setCursorPosition (rows+3) (cols+2)
 
@@ -138,7 +141,11 @@ user = forever $ do
 drawSnack :: World -> IO()
 drawSnack world = do
     let (snackx, snacky) = (snack world)
-    write "O" (snackx, snacky)
+    setSGR [SetColor Foreground Vivid Red]
+    write "☻" (snackx, snacky)
+    -- setCursorPosition snackx snacky
+    -- mapM_ putStrLn (unicodeByName "pizza")
+    setSGR [Reset]
 
 snackSpawn :: World -> World
 snackSpawn world = do
@@ -181,13 +188,12 @@ gameOver world = do
     drawBorders (rows, cols)
     writeCenter "GAME OVER" (((rows `div` 2)), cols)
     writeCenter ("Your score: " ++ show (score world)) (((rows `div` 2)+2), cols)
-    hSetEcho stdin True                -- verhindert das printen der gedrückten tasten
+    hSetEcho stdin True -- schaltet printen der Buchstaben wieder an
     write "Enter your name: " (((rows `div` 2)+4), 5)
     name <- getLine
     appendFile "highscores.txt" (name ++ ": " ++ show (score world) ++ "\n")
     hSetEcho stdin False
     setCursorPosition (rows+3) (cols+2)
-
 
 singleplayer :: Consumer Event IO ()
 singleplayer = loop world
@@ -231,6 +237,8 @@ highscores world = do
     let list = map Text.unpack $ Text.splitOn (Text.pack "\n") (Text.pack highscores)
     writeHighscores list ((length list)+3)
     setCursorPosition (rows+3) (cols+2)
+    getChar
+    main
 
 credits :: World -> IO()
 credits world = do
