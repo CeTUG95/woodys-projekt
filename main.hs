@@ -6,7 +6,6 @@ import Control.Monad (forever)
 import Pipes
 import Pipes.Concurrent
 import qualified Data.Text as Text
-import Data.Emoji
 ----------------------------- HELPER FUNCTIONS -----------------------------
 
 data Facing = North

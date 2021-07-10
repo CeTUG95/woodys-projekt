@@ -17,7 +17,6 @@ $ cabal install random
 $ cabal install pipes
 $ cabal install pipes-concurrency
 $ cabal install ansi-terminal
-$ cabal install emoji
 ```
 
 ### Installation Windows:
@@ -29,5 +28,4 @@ $ cabal install --lib random
 $ cabal install --lib pipes
 $ cabal install --lib pipes-concurrency
 $ cabal install --lib ansi-terminal
-$ cabal install --lib emoji
 ```
