@@ -144,8 +144,8 @@ snackSpawn :: World -> World
 snackSpawn world = do
     let (rows, cols) = (borders world)
     let g = (randomSeed world)
-    let (randX, seed) = R.randomR (3, rows+1) g
-    let (randY, seed1) = R.randomR (3, cols) seed
+    let (randX, seed) = R.randomR (3, rows+2) g
+    let (randY, seed1) = R.randomR (1, cols) seed
     let newWorld = world { snack = (randX, randY), randomSeed = seed1 }
     newWorld
 
